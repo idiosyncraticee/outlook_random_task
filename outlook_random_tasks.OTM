@@ -1,0 +1,159 @@
+Public Sub GetListOfTasks()
+    On Error GoTo On_Error
+    
+    Dim tasksArray() As String
+
+    
+    Dim Session As Outlook.NameSpace
+    Dim TaskFolder As Outlook.Folder
+    Dim currentItem As Object
+    Dim currentTask As TaskItem
+    Set Session = Application.Session
+    Dim taskCounter As Integer
+    
+    taskCounter = 0
+    ReDim Preserve tasksArray(0 To 0)
+    
+    Set TaskFolder = Session.GetDefaultFolder(olFolderTasks)
+    Set MailFolder = Session.GetDefaultFolder(olFolderInbox)
+    
+'   COLLECT UP THE TASKS THAT ARE FLAGGED FROM THE EMAIL
+
+    For Each Item In MailFolder.Items
+'       FlagStatus 0 IS UNMARKED
+'       FlagStatus 1 IS COMPLETE
+'       FlagStatus 2 IS FLAGGED
+
+        If (Item.FlagStatus = 2) Then
+            
+'            Report = Report & AddToReportIfNotBlank("Task Subject", Item.TaskSubject)
+'            Report = Report & AddToReportIfNotBlank("FlagStatus", Item.FlagStatus)
+
+'
+'            Report = Report & vbCrLf & vbCrLf
+            
+'           PUSH THE TASK SUBJECT ONTO THE ARRAY
+            tasksArray(taskCounter) = Item.TaskSubject
+            taskCounter = taskCounter + 1
+            ReDim Preserve tasksArray(0 To taskCounter)
+
+        End If
+    Next
+
+'   COLLECT UP THE TASKS THAT ARE CREATED AS TASKS
+
+    For Each currentItem In TaskFolder.Items
+        If (currentItem.Class = olTask) Then
+            Set currentTask = currentItem
+
+            If (currentTask.Complete = False) Then
+                
+'                THE HIGH IMPORTANCE ITEMS ARE 5 TIMES AS LIKELY TO SHOW UP AS THE LOW IMPORTANCE ITEMS
+                If (currentTask.Importance = olImportanceHigh) Then
+                    ImportanceWeight = 10
+                    MsgBox "Subject = " & currentTask.Subject
+                ElseIf (currentTask.Importance = olImportanceNormal) Then
+                    ImportanceWeight = 3
+                ElseIf (currentTask.Importance = olImportanceLow) Then
+                    ImportanceWeight = 1
+                End If
+                
+                
+'               PUSH THE TASK SUBJECT ONTO THE ARRAY
+                For a_counter = 1 To ImportanceWeight
+                    tasksArray(taskCounter) = currentTask.Subject
+                    taskCounter = taskCounter + 1
+                    ReDim Preserve tasksArray(0 To taskCounter)
+                Next a_counter
+            
+            End If
+
+        End If
+
+    Next
+
+'   TASK Array ends up 1 size larger than number of matches
+    ReDim Preserve tasksArray(0 To taskCounter - 1)
+
+
+    'DEFINE THE ALOTED TIME FOR A GIVEN TASK IN MINUTES
+    Dim taskDuration As Integer
+    taskDuration = 50
+    
+    
+    Dim workingSlotCount As Integer
+    workingSlotCount = 11
+    Dim workingSlotArray() As String
+    ReDim Preserve workingSlotArray(0 To workingSlotCount - 1)
+    
+    'DEFINE THE TIME SLOTS TO WORK
+    workingSlotArray(0) = "08:00:00 AM"
+    workingSlotArray(1) = "09:00:00 AM"
+    workingSlotArray(2) = "10:00:00 AM"
+    workingSlotArray(3) = "11:00:00 AM"
+    workingSlotArray(4) = "01:00:00 PM"
+    workingSlotArray(5) = "02:00:00 PM"
+    workingSlotArray(6) = "03:00:00 PM"
+    workingSlotArray(7) = "04:00:00 PM"
+'   THE LAST ENTRY MUST BE AN HOUR AHEAD FOR CHECKING ON THE TIME
+    workingSlotArray(8) = "05:00:00 PM"
+
+
+    Dim randomTaskNumber As Integer
+    'THE MINUS 2 IS BECAUSE ITS ZERO BASED AND BECAUSE THE LAST ENTRY IN THE WORKINGSLOTSARRAY ISNT A WORKING SLOT
+    For slotCounter = 0 To workingSlotCount - 2
+    '   PICK A RANDOM TASK FROM THE ARRAY
+        randomTaskNumber = Int((UBound(tasksArray) + 1 - 0 + 0) * Rnd + 0)
+    '   MsgBox ("Total length of tasksArray is " & UBound(tasksArray) + 1 & " and random task is " & tasksArray(randomTaskNumber))
+    
+    '   ONLY MAKE A TASK IF THE TIME HASNT HAPPENED YET OR ITS INSIDE OF THE HOUR
+        If (DateDiff("s", Now, DateAdd("n", 1, Date & " " & workingSlotArray(slotCounter + 1))) > 0) Then
+        
+    '       ADD THE TASK TO THE CALENDAR
+            CreateApptInPST tasksArray(randomTaskNumber), DateAdd("n", 1, Date & " " & workingSlotArray(slotCounter)), taskDuration
+        End If
+    Next
+    
+Exiting:
+        Exit Sub
+On_Error:
+    MsgBox "error=" & Err.Number & " " & Err.Description & " " & Err.Source
+    Resume Exiting
+    
+End Sub
+
+
+Sub CreateApptInPST(Subject As String, _
+    DateTime As Date, Duration As Integer)
+'   TODO: FIGURE OUT HOW TO EXTRACT THE PST NAME AUTOMATICALLY
+    Dim PSTName As String
+    PSTName = "name@example.com"
+    
+    Dim olApp As Outlook.Application, objName As NameSpace
+    Dim PST As MAPIFolder, PSTcal As MAPIFolder
+    
+    Set olApp = Outlook.Application
+    Set objName = olApp.GetNamespace("MAPI")
+
+    Set PST = objName.Folders(PSTName)
+
+    Set PSTcal = PST.Folders("Calendar")
+    Dim i As AppointmentItem
+
+    Set i = PSTcal.Items.Add
+    i.Subject = Subject
+    i.Start = DateTime
+    i.ReminderMinutesBeforeStart = 0
+    i.Duration = Duration
+    i.BusyStatus = olFree
+'   ORANGE CATEGORY IS JUST SO ITS COLORED DIFFERENT IN THE CALENDAR
+    i.Categories = "Orange Category"
+'    MsgBox i.Start & "=xxx=" & i.Conflicts.Count
+    
+'   TODO: GET THE CONFLICT CHECK TO WORK
+    If (i.IsConflict = False) Then
+        i.Save
+    End If
+
+End Sub
+
